@@ -1,5 +1,6 @@
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import WebBaseLoader
+from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 from langchain_core.language_models import BaseChatModel
 from langchain_core.prompts import ChatPromptTemplate
@@ -17,18 +18,24 @@ def load_links(
     """Download contents from Internet and store them in vector db"""
     loader = WebBaseLoader(links)
     docs_gen = loader.lazy_load()
-    docs = []
-    for d in tqdm(docs_gen, "Scrape websites", len(links), disable=silent):
-        docs.append(d)
+    docs: list[Document] = []
+    for d in tqdm(docs_gen, "Scrape websites", len(links)):
+        if len(d.page_content) < 1000:  # likely blocked by website
+            continue
+        # filter only the news contents
+        sentences = d.page_content.split("\n")
+        sentences = [s for s in sentences if len(s) > 100]
+        news = "\n".join(sentences)
+        docs.append(d.model_copy(update={"page_content": news}))
 
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=chunk_size, chunk_overlap=chunk_overlap
     )
     split_docs = splitter.split_documents(docs)
-    vectorstore = InMemoryVectorStore(embeddings)
-    for d in tqdm(split_docs, "Create vector DB", disable=silent):
-        vectorstore.add_documents([d])
-    return vectorstore
+    vector_store = InMemoryVectorStore(embeddings)
+    for d in tqdm(split_docs, "Create vector store", disable=silent):
+        vector_store.add_documents([d])
+    return vector_store
 
 
 def model_qa(model: BaseChatModel, query: str, vectorstore: VectorStore):

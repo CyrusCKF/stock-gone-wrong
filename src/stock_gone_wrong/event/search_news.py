@@ -3,15 +3,15 @@
 Reference: https://github.com/Nv7-GitHub/googlesearch
 """
 
+from datetime import datetime
 from urllib.parse import unquote
 
 import requests
 from bs4 import BeautifulSoup
 from googlesearch import SearchResult, get_useragent
-from pandas import Timestamp
 
 
-def request_news_with_consent(query: str, start: Timestamp, end: Timestamp, lang="en"):
+def request_news_with_consent(query: str, start: datetime, end: datetime, lang="en"):
     start_str = start.strftime("%m/%d/%Y")
     end_str = end.strftime("%m/%d/%Y")
     response = requests.get(
@@ -53,7 +53,7 @@ def scrape_search_results(soup: BeautifulSoup) -> list[SearchResult]:
     return results
 
 
-def search_news(query: str, start: Timestamp, end: Timestamp, lang="en"):
+def search_news(query: str, start: datetime, end: datetime, lang="en"):
     response = request_news_with_consent(query, start, end, lang)
     soup = BeautifulSoup(response.content, "html.parser")
     return scrape_search_results(soup)

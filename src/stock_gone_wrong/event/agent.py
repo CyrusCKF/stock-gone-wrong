@@ -1,25 +1,18 @@
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import WebBaseLoader
 from langchain_core.documents import Document
-from langchain_core.embeddings import Embeddings
 from langchain_core.language_models import BaseChatModel
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.vectorstores import InMemoryVectorStore, VectorStore
+from langchain_core.retrievers import BaseRetriever
 from tqdm import tqdm
 
 
-def load_links(
-    links: list[str],
-    embeddings: Embeddings,
-    chunk_size=1000,
-    chunk_overlap=200,
-    silent=False,
-):
-    """Download contents from Internet and store them in vector db"""
+def load_links(links: list[str], chunk_size=1000, chunk_overlap=200, silent=False):
+    """Download contents from Internet and split them to chunks"""
     loader = WebBaseLoader(links)
     docs_gen = loader.lazy_load()
     docs: list[Document] = []
-    for d in tqdm(docs_gen, "Scrape websites", len(links)):
+    for d in tqdm(docs_gen, "Scrape websites", len(links), disable=silent):
         if len(d.page_content) < 1000:  # likely blocked by website
             continue
         # filter only the news contents
@@ -31,18 +24,15 @@ def load_links(
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=chunk_size, chunk_overlap=chunk_overlap
     )
-    split_docs = splitter.split_documents(docs)
-    vector_store = InMemoryVectorStore(embeddings)
-    for d in tqdm(split_docs, "Create vector store", disable=silent):
-        vector_store.add_documents([d])
-    return vector_store
+    splitted_docs = splitter.split_documents(docs)
+    return splitted_docs
 
 
-def model_qa(model: BaseChatModel, query: str, vectorstore: VectorStore):
+def model_qa(model: BaseChatModel, query: str, retriever: BaseRetriever):
     """Return (streaming_response, source)"""
     prompt = """You are an assistant for question-answering tasks. Use the following pieces of retrieved context to answer the question. If you don't know the answer, just say that you don't know. Use three sentences maximum and keep the answer concise.\nQuestion: {question} \nContext: {context} \nAnswer:"""
     template = ChatPromptTemplate.from_messages([("system", prompt)])
-    similar_docs = vectorstore.similarity_search(query, k=4)
+    similar_docs = retriever.invoke(query)
     message = template.invoke(
         {
             "question": query,

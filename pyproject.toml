@@ -26,4 +26,7 @@ dependencies = [
     "jupyter",
     "googlesearch-python",
     "tqdm",
+    "rank_bm25",
+    "faiss-cpu",
+    "dearpygui",
 ]

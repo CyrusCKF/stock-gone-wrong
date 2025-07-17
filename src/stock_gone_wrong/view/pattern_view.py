@@ -1,3 +1,4 @@
+import datetime as dt
 import time
 from dataclasses import dataclass
 from datetime import datetime
@@ -14,16 +15,27 @@ from stock_gone_wrong.simularity.preprocess import extended_minmax_scale
 from stock_gone_wrong.simularity.ticker import process_history
 from stock_gone_wrong.simularity.visual import calculate_PI
 
-DAYS_WINDOW = 20
-DATA_FILE = Path(__file__) / "../../../../notebooks/us_stock.zip"
+DAYS_WINDOW = 50
+DATA_FILE = Path(__file__) / f"../../../../notebooks/us_stock_{DAYS_WINDOW}.zip"
+if not DATA_FILE.is_file():
+    DATA_FILE = Path(f"_internal/us_stock_{DAYS_WINDOW}.zip")
 
-TrendSegment = NamedTuple("TrendSegment", ticker=str, start=datetime, data=list[float])
+
+class TrendSegment(NamedTuple):
+    ticker: str
+    start: datetime
+    data: list[float]
+
+    @property
+    def end(self):
+        return self.start + dt.timedelta(days=DAYS_WINDOW * 2)
 
 
 @dataclass
 class PatternViewState:
     trends: list[TrendSegment]
     line_idx: int | None = None
+    loaded_data: DataPack | None = None
 
 
 _state = PatternViewState([])
@@ -41,15 +53,11 @@ def add_pattern_view():
     with dpg.group(horizontal=True, horizontal_spacing=40):
         with dpg.group():
             dpg.add_text("Enter your ticker")
-            ticker_input = dpg.add_input_text(width=100, default_value="MSFT")
+            dpg.add_input_text(tag="pattern_ticker_input", width=100)
 
         with dpg.group():
             dpg.add_text("Metrics")
-            metrics_dropdown = dpg.add_combo(
-                ("Close", "Volume", "Close x Volume"),
-                default_value="Close",
-                width=150,
-            )
+            dpg.add_combo(("Close", "Volume"), tag="metrics_dropdown", width=150)
 
         with dpg.group():
             with dpg.group(horizontal=True):
@@ -62,16 +70,16 @@ def add_pattern_view():
                         "predictive power.",
                         wrap=300,
                     )
-            forecast_toggle = dpg.add_checkbox()
+            dpg.add_checkbox(tag="forecast_toggle")
 
         with dpg.group():
             dpg.add_text("Num results")
-            num_results_input = dpg.add_input_int(
+            dpg.add_input_int(
                 width=100,
                 min_clamped=True,
                 default_value=10,
                 min_value=1,
-                tag="num_results",
+                tag="num_patterns",
             )
 
     dpg.add_spacer(height=10)
@@ -87,10 +95,10 @@ def add_pattern_view():
                 height=50,
                 width=200,
                 user_data=[
-                    ticker_input,
-                    metrics_dropdown,
-                    forecast_toggle,
-                    num_results_input,
+                    "pattern_ticker_input",
+                    "metrics_dropdown",
+                    "forecast_toggle",
+                    "num_patterns",
                 ],
                 callback=lambda s, a, u: find_similar_stocks(*dpg.get_values(u)),
             )
@@ -108,18 +116,15 @@ def add_pattern_view():
                 dpg.add_text("CTRL+click to enter value.")
             dpg.add_slider_int(
                 tag="trend_idx",
-                max_value=dpg.get_value("num_results") - 1,
+                max_value=dpg.get_value("num_patterns") - 1,
                 clamped=True,
                 width=-1,
                 callback=lambda s, a: update_line_idx(a),
             )
 
-        with dpg.group(horizontal=True):
+        with dpg.group(horizontal=True, tag="explore_group", show=False):
             dpg.add_text("", tag="side_info")
-            dpg.add_button(
-                label="Explore more",
-                callback=lambda: dpg.set_value("tab_view", "events_tab"),
-            )
+            dpg.add_button(tag="explore_pattern", user_data=None, label="Explore more")
 
         with dpg.plot(height=300, width=-1, crosshairs=True):
             dpg.add_plot_legend()
@@ -155,7 +160,10 @@ def update_line_idx(idx: int):
     if line_idx is not None:
         dpg.bind_item_theme(f"side_line_{line_idx}", "side_theme_highlight")
     dpg.set_value("trend_idx", idx)
-    dpg.set_value("side_info", f"{_state.trends[idx][0]} {_state.trends[idx][1]}")
+    trend = _state.trends[idx]
+    dpg.configure_item("explore_group", show=True)
+    dpg.set_value("side_info", f"{trend[0]} {trend[1].strftime('%Y-%m-%d')}")
+    dpg.configure_item("explore_pattern", user_data=trend)
     _state.line_idx = idx
 
 
@@ -167,8 +175,12 @@ def find_similar_stocks(
     dpg.configure_item("similarity_plot", show=False)
     dpg.configure_item("trend_idx", max_value=num_results - 1)
 
-    query_df = yf.Tickers(ticker).history("6mo", progress=False)
-    assert query_df is not None
+    try:
+        query_df = yf.Tickers(ticker).history("6mo", progress=False)
+        if query_df is None:
+            raise RuntimeError(f"Cannot find ticker data {ticker}")
+    except:
+        return
     query_df = process_history(query_df)
     query_df.columns = query_df.columns.droplevel(1)
 
@@ -176,14 +188,17 @@ def find_similar_stocks(
     query_data = minmax_scale(raw_query_data, feature_range=(0, 1))
     query_data = query_data.reshape((1, -1))
 
-    data_pack = DataPack.extract(DATA_FILE)
+    if _state.loaded_data is None:
+        _state.loaded_data = DataPack.extract(DATA_FILE)
+    data_pack = _state.loaded_data
     (dist, *_), (idx, *_) = data_pack.indices[metrics].search(query_data, num_results)
     trends: list[TrendSegment] = []
     for i in idx:
         info = data_pack.meta.loc[i]
         series = data_pack.get_series(i, metrics, DAYS_WINDOW * 2)
         series = extended_minmax_scale(series, (0, 1), fit_window=slice(0, DAYS_WINDOW))
-        trends.append((info["Ticker"], info["Start"], series))
+        start = datetime.strptime(info["Start"], "%Y-%m-%d")
+        trends.append(TrendSegment(info["Ticker"], start, series.tolist()))
     scaled_data = np.stack([t[2] for t in trends])
 
     stock_days = list(range(-DAYS_WINDOW, DAYS_WINDOW))
@@ -226,6 +241,9 @@ def __main():
     dpg.create_context()
     with dpg.window(width=700, height=500):
         add_pattern_view()
+    dpg.set_value("pattern_ticker_input", "MSFT")
+    dpg.set_value("metrics_dropdown", "Close")
+    dpg.set_value("forecast_toggle", True)
     dpg.show_style_editor()
     dpg.show_item_registry()
 

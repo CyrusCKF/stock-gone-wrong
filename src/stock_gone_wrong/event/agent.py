@@ -39,5 +39,5 @@ def model_qa(model: BaseChatModel, query: str, retriever: BaseRetriever):
             "context": "\n\n".join(doc.page_content for doc in similar_docs),
         }
     )
-    response = model.stream(message)
+    response = model.invoke(message)
     return response, similar_docs

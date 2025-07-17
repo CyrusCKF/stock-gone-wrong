@@ -2,7 +2,7 @@ import csv
 import io
 from ftplib import FTP
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, cast
 
 import pandas as pd
 
@@ -53,3 +53,11 @@ def process_history(
         [columns, df.columns.levels[1]], names=df.columns.names
     )
     return df
+
+
+def shorlist_history(df: pd.DataFrame, num: int, metrics="Volume"):
+    mean_metrics = cast(pd.Series, df[metrics].mean(axis=0))
+    top_metrics = mean_metrics.sort_values(ascending=False).head(num)
+    top_tickers = top_metrics.index.tolist()
+    df_filtered = df.loc[:, df.columns.get_level_values(1).isin(top_tickers)]
+    return df_filtered

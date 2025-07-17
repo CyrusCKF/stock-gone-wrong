@@ -1,24 +1,29 @@
-# stock-gone-wrong
+# Stock Gone Wrong
 
 Analyzing the triggers behind market meltdowns.
 
-## Example
+## Screenshots
 
-![MSFT stock](assets/msft-6mo.png)
+<img src="assets/screenshot-similarity.png" alt="screenshot similarity" width="40%">
+<img src="assets/screenshot-events.png" alt="screenshot events" width="40%">
 
-### *Insights of 3*
+## Download
 
-> MSFT rises from 358.46 in 2025-04-21 to 458.87 in 2025-05-19
-
-Why?  
-Microsoft's stock price rise is attributed to its strong quarterly results that surpassed Wall Street estimates. The company's cloud-computing revenue, particularly from its AI and Azure platform, saw significant growth. Additionally, upbeat changes in analysts' estimates indicate a favorable outlook on Microsoft's business health and profitability, contributing to the stock price increase.
-
-Sources: [1](https://www.tastylive.com/news-insights/microsoft-msft-earnings-preview-ai-growth-market-uncertainty), [2](https://www.nasdaq.com/articles/microsoft-msft-beats-stock-market-upswing-what-investors-need-know-0), [3](https://www.investopedia.com/why-microsoft-stock-had-one-of-its-best-post-earnings-days-in-a-decade-11726613)
+Find the latest release in [Releases](https://github.com/CyrusCKF/stock-gone-wrong/releases)
 
 ## Installation
 
 Run
 
 ```bash
+# (recommended) create and activate python environment
 pip install -e .
+python main.py
+```
+
+Build as executable
+
+```bash
+# activate python environment if valid
+package.bat
 ```

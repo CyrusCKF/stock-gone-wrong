@@ -29,4 +29,5 @@ dependencies = [
     "rank_bm25",
     "faiss-cpu",
     "dearpygui",
+    "pyinstaller",
 ]
